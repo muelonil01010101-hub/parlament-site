@@ -1,0 +1,145 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Парламент</title>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Pixelify+Sans:wght@400;600&family=Press+Start+2P&display=swap">
+<style>
+:root{--a:#3da5ff;--bg:#070c18;--panel:color-mix(in srgb,var(--a) 7%,#070c18);--panel2:color-mix(in srgb,var(--a) 14%,#070c18);--line:color-mix(in srgb,var(--a) 35%,#070c18);--tx:#d6e6f7;--mut:#7f95ad;color-scheme:dark;box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+*{box-sizing:border-box}
+body{margin:0;background:var(--bg);color:var(--tx);font:18px/1.5 "Pixelify Sans",monospace;image-rendering:pixelated;
+background-image:linear-gradient(var(--line) 1px,transparent 1px),linear-gradient(90deg,var(--line) 1px,transparent 1px);background-size:32px 32px;background-position:-1px -1px;min-height:100vh}
+body::before{content:"";position:fixed;inset:0;background:repeating-linear-gradient(0deg,rgba(0,0,0,.18) 0 1px,transparent 1px 3px);pointer-events:none;z-index:50}
+.wrap{max-width:960px;margin:0 auto;padding:20px 20px 60px}
+h1,h2,h3,.px{font-family:"Press Start 2P",monospace;line-height:1.5;letter-spacing:0}
+.box{background:var(--panel);margin:4px;padding:18px;box-shadow:0 -4px 0 0 var(--a),0 4px 0 0 var(--a),-4px 0 0 0 var(--a),4px 0 0 0 var(--a),inset 0 0 0 2px var(--line)}
+header.box{display:flex;flex-wrap:wrap;gap:14px;align-items:center;justify-content:space-between;margin-bottom:28px}
+.logo{display:flex;align-items:center;gap:12px;font:14px "Press Start 2P",monospace;color:var(--a);text-shadow:2px 2px 0 #000}
+.logo i{width:24px;height:24px;background:var(--a);box-shadow:inset -4px -4px 0 rgba(0,0,0,.35),inset 4px 4px 0 rgba(255,255,255,.4);display:block}
+nav{display:flex;flex-wrap:wrap;gap:8px}
+nav a,.btn{font:10px "Press Start 2P",monospace;color:var(--tx);text-decoration:none;background:var(--panel2);padding:10px 12px;border:0;cursor:pointer;box-shadow:inset -3px -3px 0 rgba(0,0,0,.4),inset 3px 3px 0 rgba(255,255,255,.1)}
+nav a:hover,nav a.on,.btn:hover{background:var(--a);color:#04101f}
+.btn.big{padding:14px 18px;background:var(--a);color:#04101f}
+h1{font-size:22px;margin:0 0 14px;color:#fff;text-shadow:3px 3px 0 var(--line)}
+h2{font-size:14px;color:var(--a);margin:0 0 14px}
+h3{font-size:11px;margin:0 0 8px}
+.grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(220px,1fr));gap:22px;margin-top:26px}
+.stat{font:20px "Press Start 2P",monospace;color:var(--a)}
+.mut{color:var(--mut)}
+.news{margin-bottom:22px}
+.news time{font-size:14px;color:var(--mut)}
+.tag{display:inline-block;font:9px "Press Start 2P",monospace;background:var(--a);color:#04101f;padding:4px 6px;margin-right:8px}
+ol.rules{padding-left:0;list-style:none;counter-reset:r;margin:0}
+ol.rules li{counter-increment:r;padding:10px 0 10px 54px;position:relative;border-bottom:2px dotted var(--line)}
+ol.rules li::before{content:counter(r,decimal-leading-zero);position:absolute;left:0;top:10px;font:12px "Press Start 2P",monospace;color:var(--a)}
+input,textarea{width:100%;background:#050912;color:var(--tx);border:0;padding:12px;font:inherit;margin:6px 0 14px;box-shadow:inset 0 0 0 2px var(--line)}
+input:focus,textarea:focus{outline:none;box-shadow:inset 0 0 0 2px var(--a)}
+label{font:10px "Press Start 2P",monospace;color:var(--mut)}
+.sw{display:flex;gap:8px;align-items:center;flex-wrap:wrap}
+.sw button{width:22px;height:22px;border:0;cursor:pointer;box-shadow:inset -3px -3px 0 rgba(0,0,0,.4),inset 3px 3px 0 rgba(255,255,255,.35);padding:0}
+.sw button.on{outline:3px solid #fff;outline-offset:2px}
+.tbl{overflow-x:auto}
+table{width:100%;border-collapse:collapse}
+td,th{text-align:left;padding:8px;border-bottom:2px dotted var(--line)}
+th{font:9px "Press Start 2P",monospace;color:var(--mut)}
+footer{margin-top:34px;text-align:center;color:var(--mut);font-size:15px}
+.msg{color:var(--a);font-family:"Press Start 2P",monospace;font-size:10px}
+@property --a{syntax:"<color>";inherits:true;initial-value:#3da5ff}
+:root{transition:--a .6s ease}
+#fx{position:fixed;inset:0;width:100%;height:100%;pointer-events:none;z-index:0}
+.wrap{position:relative;z-index:1}
+body{animation:drift 24s linear infinite}
+@keyframes drift{to{background-position:31px 31px}}
+@keyframes rise{from{opacity:0;transform:translateY(22px)}to{opacity:1;transform:none}}
+@keyframes pulse{50%{transform:scale(1.25) rotate(90deg);filter:drop-shadow(0 0 8px var(--a))}}
+@keyframes glitch{0%,91%,100%{transform:none;text-shadow:3px 3px 0 var(--line)}93%{transform:translate(-3px,0);text-shadow:3px 0 0 #ff4d6d,-3px 0 0 #4dd2ff}96%{transform:translate(3px,0);text-shadow:-3px 0 0 #ff4d6d,3px 0 0 #4dd2ff}}
+@keyframes bar{from{transform:scaleX(0)}to{transform:scaleX(1)}}
+header.box{animation:rise .7s cubic-bezier(.2,.8,.2,1) backwards}
+#app>*,.grid>*{animation:rise .65s cubic-bezier(.2,.8,.2,1) backwards}
+#app>*:nth-child(2){animation-delay:.1s}#app>*:nth-child(3){animation-delay:.2s}#app>*:nth-child(4){animation-delay:.3s}#app>*:nth-child(n+5){animation-delay:.4s}
+.grid>*:nth-child(1){animation-delay:.3s}.grid>*:nth-child(2){animation-delay:.4s}.grid>*:nth-child(3){animation-delay:.5s}
+.box{transition:transform .3s cubic-bezier(.2,.8,.2,1),box-shadow .3s}
+.box:hover{transform:translate(-2px,-4px);box-shadow:0 -4px 0 0 var(--a),0 4px 0 0 var(--a),-4px 0 0 0 var(--a),4px 0 0 0 var(--a),inset 0 0 0 2px var(--line),8px 10px 0 0 rgba(0,0,0,.45),0 0 30px color-mix(in srgb,var(--a) 40%,transparent)}
+header.box:hover{transform:none}
+nav a,.btn{transition:background .2s,color .2s,transform .15s}
+nav a:hover,.btn:hover{transform:translateY(-3px)}
+nav a:active,.btn:active{transform:translateY(2px)}
+.sw button{transition:transform .15s}.sw button:hover{transform:scale(1.3)}
+.logo i{animation:pulse 3s ease-in-out infinite}
+h1{animation:glitch 6s infinite}
+h2::after{content:"";display:block;height:4px;width:80px;margin-top:10px;background:var(--a);transform-origin:left;animation:bar .8s .3s cubic-bezier(.2,.8,.2,1) backwards}
+@media (prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important}}
+</style>
+</head>
+<body>
+<canvas id="fx"></canvas>
+<div class="wrap">
+<header class="box">
+<a class="logo" href="#home" style="text-decoration:none"><i></i>ПАРЛАМЕНТ</a>
+<nav id="nav"></nav>
+<div class="sw" id="sw" title="Цвет сайта"></div>
+</header>
+<main id="app"></main>
+<footer>© Парламент · сделано с любовью к пикселям</footer>
+</div>
+<script>
+var CHAT_URL="#"; // сюда вставьте ссылку на ваш чат
+var API_URL=" https://parlamentclan.workers.dev.dev/api";
+var COLORS=["#3da5ff","#2ee6d6","#a77bff","#5ce07a","#ffa63d","#ff5d6c"];
+var PAGES=[["home","Главная"],["news","Новости"],["rules","Правила"],["polls","Голосования"],["members","Состав"],["join","Вступить"],["admin","Админ"]];
+function ld(k,d){try{var v=localStorage.getItem(k);return v?JSON.parse(v):d}catch(e){return d}}
+function sv(k,v){try{localStorage.setItem(k,JSON.stringify(v))}catch(e){}}
+function esc(s){return String(s).replace(/[&<>"]/g,function(c){return{"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;"}[c]})}
+var news=[],rules=[],members=[],polls=[],me={},key=ld("key",""),adminToken=ld("adminToken",""),accent=ld("accent",COLORS[0]),admin=false;
+function api(m,u,b){var h={"Content-Type":"application/json","X-Key":key};if(adminToken)h["X-Admin-Token"]=adminToken;return fetch(API_URL+u.replace(/^\/api/,""),{method:m,headers:h,body:b?JSON.stringify(b):undefined}).then(function(r){return r.json().then(function(j){if(!r.ok)throw j;return j})})}
+function load(){return Promise.all([api("GET","/api/news"),api("GET","/api/rules"),api("GET","/api/members"),api("GET","/api/me"),api("GET","/api/polls")]).then(function(a){news=a[0];rules=a[1];members=a[2];me=a[3];admin=a[3].admin;polls=a[4];render()},function(){render()})}
+function setAccent(c){accent=c;document.documentElement.style.setProperty("--a",c);sv("accent",c);document.querySelectorAll("#sw button").forEach(function(b){b.classList.toggle("on",b.dataset.c===c)})}
+document.getElementById("sw").innerHTML=COLORS.map(function(c){return'<button data-c="'+c+'" style="background:'+c+'" aria-label="Цвет"></button>'}).join("");
+document.getElementById("sw").onclick=function(e){if(e.target.dataset.c)setAccent(e.target.dataset.c)};
+function newsHtml(n){return n.map(function(x){return'<article class="box news"><h3><span class="tag">NEWS</span>'+esc(x.t)+'</h3><time>'+esc(x.d)+'</time><p>'+esc(x.b)+'</p></article>'}).join("")}
+function rulesHtml(){return'<ol class="rules">'+rules.map(function(r){return"<li>"+esc(r)+"</li>"}).join("")+"</ol>"}
+var V={
+home:function(){return'<section class="box"><h1>ДОБРО ПОЖАЛОВАТЬ В ПАРЛАМЕНТ</h1><p>Дружный клан для тех, кто играет ради удовольствия. Общаемся, проводим турниры и просто хорошо проводим время.</p><p><a class="btn big" href="'+esc(CHAT_URL)+'">В ЧАТ КЛАНА</a> <a class="btn big" href="#join" style="background:var(--panel2);color:var(--tx)">ВСТУПИТЬ</a></p></section><div class="grid"><div class="box"><div class="mut">Участников</div><div class="stat">'+members.length+'</div></div><div class="box"><div class="mut">Основан</div><div class="stat">2026</div></div><div class="box"><div class="mut">Набор</div><div class="stat">ОТКРЫТ</div></div></div><h2 style="margin-top:34px">ПОСЛЕДНИЕ НОВОСТИ</h2>'+newsHtml(news.slice(0,2))},
+news:function(){return'<h2>НОВОСТИ</h2>'+newsHtml(news)},
+rules:function(){return'<section class="box"><h2>ПРАВИЛА КЛАНА</h2>'+rulesHtml()+'</section>'},
+members:function(){return'<h2>СОСТАВ</h2><div class="grid">'+members.map(function(m){return'<div class="box"><h3>'+esc(m.nick)+'</h3><span class="tag">'+esc(m.role)+'</span><div class="mut" style="margin:8px 0">'+(m.d?"В клане с "+esc(m.d):"")+'</div><p>'+esc(m.bio||"")+'</p>'+m.ach.map(function(a){return'<span class="tag" style="margin-top:6px">★ '+esc(a.title)+'</span>'}).join(" ")+'</div>'}).join("")+'</div>'},
+polls:function(){var who=me.member?"ВЫ ВОШЛИ КАК "+esc(me.member):key?"КЛЮЧ НЕ ПОДОШЁЛ":"";return'<section class="box"><h2>ГОЛОСОВАНИЯ</h2><p class="mut">Голосовать могут участники клана. Ключ выдаёт админ (его же видно после принятия заявки).</p><label>КЛЮЧ УЧАСТНИКА</label><input id="kk" maxlength="20" value="'+esc(key)+'"><button class="btn big" id="ks">ВОЙТИ</button> <span class="msg">'+who+'</span></section>'+(polls.map(function(p){var tot=p.opts.reduce(function(s,o){return s+o.n},0);return'<section class="box" style="margin-top:22px"><h3>'+esc(p.q)+(p.closed?' <span class="tag">ЗАКРЫТО</span>':"")+'</h3>'+p.opts.map(function(o){var pc=tot?Math.round(o.n*100/tot):0;return'<div style="margin:12px 0"><div>'+(p.mine===o.id?"▶ ":"")+esc(o.t)+' <span class="mut">'+o.n+" · "+pc+"%</span> "+(!p.closed&&me.member?'<button class="btn" data-vp="'+p.id+'" data-vo="'+o.id+'">ГОЛОС</button>':"")+'</div><div style="height:8px;background:var(--panel2);margin-top:6px"><div style="height:8px;width:'+pc+'%;background:var(--a);transition:width .8s"></div></div></div>'}).join("")+'</section>'}).join("")||'<p class="mut">Пока нет голосований.</p>')},
+join:function(){return'<section class="box"><h2>ЗАЯВКА НА ВСТУПЛЕНИЕ</h2><label>ИГРОВОЙ НИК</label><input id="j1"><label>КОНТАКТ (НИК В ЧАТЕ)</label><input id="j2"><label>О СЕБЕ</label><textarea id="j3" rows="4"></textarea><button class="btn big" id="jb">ОТПРАВИТЬ</button> <span class="msg" id="jm"></span></section><section class="box" style="margin-top:22px"><h2>ПРОВЕРИТЬ ЗАЯВКУ</h2><label>КОД ЗАЯВКИ</label><input id="sc" maxlength="12"><button class="btn big" id="sb">ПРОВЕРИТЬ</button> <span class="msg" id="sm"></span></section>'},
+admin:function(){if(!admin)return'<section class="box"><h2>ВХОД ДЛЯ АДМИНА</h2><label>ПАРОЛЬ</label><input id="ap" type="password"><button class="btn big" id="ab">ВОЙТИ</button> <span class="msg" id="am"></span></section>';
+var S=' style="margin-top:22px"',L=function(a,f){return a.map(f).join("")};
+return'<section class="box"><h2>НОВАЯ НОВОСТЬ</h2><label>ЗАГОЛОВОК</label><input id="nt" maxlength="200"><label>ТЕКСТ</label><textarea id="nb" rows="3"></textarea><button class="btn big" id="na">ОПУБЛИКОВАТЬ</button><div class="mut" style="margin-top:16px">'+L(news,function(n){return"<div>"+esc(n.t)+' <button class="btn" data-en="'+n.id+'">✎</button> <button class="btn" data-dn="'+n.id+'">×</button></div>'})+'</div></section><section class="box"'+S+'><h2>ПРАВИЛА (ПО СТРОКЕ)</h2><textarea id="ru" rows="7">'+esc(rules.join("\n"))+'</textarea><button class="btn big" id="rs">СОХРАНИТЬ</button> <span class="msg" id="rm"></span></section><section class="box"'+S+'><h2>УЧАСТНИКИ</h2><label>НИК</label><input id="mn" maxlength="50"><label>РОЛЬ</label><input id="mr" maxlength="50"><button class="btn big" id="ma">ДОБАВИТЬ</button><div class="mut" style="margin-top:16px">'+L(members,function(m){return"<div style='margin-bottom:12px'>"+esc(m.nick)+" · "+esc(m.role)+" · КЛЮЧ: "+esc(m.key||"")+' <button class="btn" data-em="'+m.id+'">✎</button> <button class="btn" data-am="'+m.id+'">★</button> <button class="btn" data-dm="'+m.id+'">×</button><br>'+m.ach.map(function(a){return'<span class="tag">'+esc(a.title)+' <a href="#admin" data-dx="'+a.id+'" style="color:inherit">×</a></span>'}).join(" ")+"</div>"})+'</div></section><section class="box"'+S+'><h2>ГОЛОСОВАНИЯ</h2><label>ВОПРОС</label><input id="pq" maxlength="200"><label>ВАРИАНТЫ (ПО СТРОКЕ)</label><textarea id="po" rows="3"></textarea><button class="btn big" id="pa">СОЗДАТЬ</button><div class="mut" style="margin-top:16px">'+L(polls,function(p){return"<div>"+esc(p.q)+(p.closed?" (закрыто)":"")+' <button class="btn" data-pc="'+p.id+'">'+(p.closed?"ОТКРЫТЬ":"ЗАКРЫТЬ")+'</button> <button class="btn" data-dp="'+p.id+'">×</button></div>'})+'</div></section><section class="box tbl"'+S+'><h2>ЗАЯВКИ</h2><div id="apps" class="mut">...</div></section><section class="box"'+S+'><h2>СМЕНИТЬ ПАРОЛЬ АДМИНА</h2><label>ТЕКУЩИЙ ПАРОЛЬ</label><input id="cp0" type="password" autocomplete="current-password"><label>НОВЫЙ ПАРОЛЬ (НЕ МЕНЬШЕ 8 СИМВОЛОВ)</label><input id="cp1" type="password" autocomplete="new-password"><button class="btn big" id="cpb">СМЕНИТЬ ПАРОЛЬ</button> <span class="msg" id="cpm"></span></section><p><button class="btn" id="lo">ВЫЙТИ</button></p>'}
+};
+function bind(p){var g=function(i){return document.getElementById(i)};
+if(p==="join"){g("jb").onclick=function(){api("POST","/api/apply",{nick:g("j1").value,contact:g("j2").value,about:g("j3").value}).then(function(r){g("jm").textContent="ЗАЯВКА ОТПРАВЛЕНА! КОД: "+r.code+" — СОХРАНИТЕ ЕГО";g("sc").value=r.code},function(e){g("jm").textContent=e.error||"ОШИБКА"})};
+g("sb").onclick=function(){api("GET","/api/status?code="+encodeURIComponent(g("sc").value)).then(function(r){g("sm").textContent=({new:"НА РАССМОТРЕНИИ",accepted:"ПРИНЯТА! ДОБРО ПОЖАЛОВАТЬ",rejected:"ОТКЛОНЕНА"}[r.status]||r.status)+(r.key?" · ВАШ КЛЮЧ УЧАСТНИКА: "+r.key:"")},function(e){g("sm").textContent=e.error||"ОШИБКА"})}}
+if(p==="polls"){g("ks").onclick=function(){key=g("kk").value.replace(/[^\w]/g,"");sv("key",key);load()};return}
+if(p!=="admin")return;
+if(!admin){g("ab").onclick=function(){api("POST","/api/login",{password:g("ap").value}).then(function(r){adminToken=r.token;sv("adminToken",adminToken);load()},function(e){g("am").textContent=e.error||"ОШИБКА"})};return}
+g("na").onclick=function(){api("POST","/api/news",{t:g("nt").value,b:g("nb").value}).then(load)};
+g("rs").onclick=function(){var r=g("ru").value.split("\n").filter(Boolean);api("PUT","/api/rules",{rules:r}).then(function(){rules=r;g("rm").textContent="СОХРАНЕНО"})};
+g("ma").onclick=function(){api("POST","/api/members",{nick:g("mn").value,role:g("mr").value}).then(load)};
+g("pa").onclick=function(){api("POST","/api/polls",{q:g("pq").value,options:g("po").value.split("\n").filter(Boolean)}).then(load,function(e){alert(e.error||"Ошибка")})};
+g("lo").onclick=function(){api("POST","/api/logout").then(function(){adminToken="";sv("adminToken","");admin=false;render()})};
+g("cpb").onclick=function(){api("POST","/api/change-password",{current:g("cp0").value,password:g("cp1").value}).then(function(r){adminToken=r.token;sv("adminToken",adminToken);g("cpm").textContent="ПАРОЛЬ ИЗМЕНЁН";g("cp0").value="";g("cp1").value=""},function(e){g("cpm").textContent=e.error||"ОШИБКА"})};
+var ST={new:"НОВАЯ",accepted:"ПРИНЯТА",rejected:"ОТКЛОНЕНА"};api("GET","/api/applications").then(function(a){g("apps").innerHTML=a.length?a.map(function(x){return'<div style="margin-bottom:16px"><span class="tag">'+(ST[x.status]||x.status)+'</span><b>'+esc(x.nick)+"</b> · "+esc(x.contact)+" · "+esc(x.d)+" · "+esc(x.code)+"<br>"+esc(x.about)+"<br>"+(x.status==="new"?'<button class="btn" data-ac="'+x.id+'">ПРИНЯТЬ</button> <button class="btn" data-rj="'+x.id+'">ОТКЛОНИТЬ</button> ':"")+'<button class="btn" data-da="'+x.id+'">×</button></div>'}).join(""):"Пока пусто"},function(){})}
+document.getElementById("app").addEventListener("click",function(e){var d=e.target.dataset;
+if(d.vp){api("POST","/api/vote",{poll:+d.vp,opt:+d.vo}).then(load,function(x){alert(x.error||"Ошибка")});return}
+if(d.em){var m=members.filter(function(x){return x.id==d.em})[0],r=prompt("Роль",m.role);if(r===null)return;var bi=prompt("О себе",m.bio||"");if(bi===null)return;api("PUT","/api/members/"+d.em,{role:r,bio:bi}).then(load);return}
+if(d.am){var at=prompt("Достижение");if(at)api("POST","/api/members/"+d.am+"/ach",{title:at}).then(load);return}
+if(d.dx){e.preventDefault();api("DELETE","/api/ach/"+d.dx).then(load);return}
+if(d.pc){api("POST","/api/polls/"+d.pc+"/toggle").then(load);return}
+if(d.dp){if(confirm("Удалить голосование?"))api("DELETE","/api/polls/"+d.dp).then(load);return}
+if(d.en){var n=news.filter(function(x){return x.id==d.en})[0],t=prompt("Заголовок",n.t);if(t===null)return;var b=prompt("Текст",n.b);if(b===null)return;api("PUT","/api/news/"+d.en,{t:t,b:b}).then(load);return}
+if(d.ac||d.rj){api("POST","/api/applications/"+(d.ac||d.rj)+"/"+(d.ac?"accept":"reject")).then(load);return}
+var u=d.dn?"news/"+d.dn:d.dm?"members/"+d.dm:d.da?"applications/"+d.da:null;if(u&&confirm("Удалить?"))api("DELETE","/api/"+u).then(function(){return d.da?render():load()})});
+function render(){var p=(location.hash||"#home").slice(1);if(!V[p])p="home";
+document.getElementById("nav").innerHTML=PAGES.map(function(x){return'<a href="#'+x[0]+'"'+(x[0]===p?' class="on"':"")+">"+x[1]+"</a>"}).join("");
+document.getElementById("app").innerHTML=V[p]();bind(p);countUp()}
+function countUp(){document.querySelectorAll(".stat").forEach(function(el){var t=parseInt(el.textContent,10);if(!t)return;var s=null;function f(ts){if(!s)s=ts;var k=Math.min((ts-s)/900,1);el.textContent=Math.round(t*(1-Math.pow(1-k,3)));if(k<1)requestAnimationFrame(f)}requestAnimationFrame(f)})}
+(function(){var c=document.getElementById("fx"),x=c.getContext("2d"),P=[],W,H;if(matchMedia("(prefers-reduced-motion:reduce)").matches)return;function rs(){W=c.width=innerWidth;H=c.height=innerHeight}rs();addEventListener("resize",rs);for(var i=0;i<36;i++)P.push({x:Math.random()*W,y:Math.random()*H,s:((Math.random()*3)|0)*2+4,v:.2+Math.random()*.5,a:.15+Math.random()*.35});function t(){x.clearRect(0,0,W,H);x.fillStyle=getComputedStyle(document.documentElement).getPropertyValue("--a").trim()||"#3da5ff";P.forEach(function(p){p.y-=p.v;if(p.y<-10){p.y=H+10;p.x=Math.random()*W}x.globalAlpha=p.a;x.fillRect(p.x|0,p.y|0,p.s,p.s)});requestAnimationFrame(t)}t()})();
+window.addEventListener("hashchange",render);setAccent(accent);render();load();
+</script>
+</body>
+</html>

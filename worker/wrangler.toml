@@ -1,0 +1,8 @@
+name = "parlament-api"
+main = "src/index.js"
+compatibility_date = "2026-11-18"
+
+[[d1_databases]]
+binding = "DB"
+database_name = "parlament"
+database_id = "3b4eaf65-fa00-4e7d-b396-24623675305f"

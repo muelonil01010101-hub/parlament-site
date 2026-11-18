@@ -1,0 +1,11 @@
+# Сброс входа администратора
+
+Выполняйте только если потеряли админский пароль. Из папки `worker`:
+
+```powershell
+npx.cmd wrangler d1 execute parlament --remote --file=reset-admin.sql
+npx.cmd wrangler secret put ADMIN_PASSWORD
+```
+
+Задайте новый начальный пароль, затем войдите им один раз. Секрет `AUTH_PEPPER` не меняйте: он защищает сохранённый хеш пароля.
+

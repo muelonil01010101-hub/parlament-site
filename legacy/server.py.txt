@@ -1,0 +1,301 @@
+#!/usr/bin/env python3
+"""Сайт клана «Парламент»: сервер на чистом Python 3 (без установки пакетов) + SQLite."""
+import hmac, json, os, re, secrets, shutil, sqlite3, sys, threading, time, urllib.parse, urllib.request
+from datetime import date
+from http.server import ThreadingHTTPServer, BaseHTTPRequestHandler
+from pathlib import Path
+
+BASE = Path(__file__).parent
+DB = BASE / "clan.db"
+PASSWORD = os.environ.get("ADMIN_PASSWORD", "")
+PORT = int(os.environ.get("PORT", "8000"))
+SECURE = "; Secure" if os.environ.get("HTTPS") == "1" else ""
+DISCORD = os.environ.get("DISCORD_WEBHOOK", "")                      # уведомления о заявках (необязательно)
+TG_TOKEN, TG_CHAT = os.environ.get("TG_TOKEN", ""), os.environ.get("TG_CHAT", "")
+if len(PASSWORD) < 8:
+    sys.exit("Задайте пароль админа (минимум 8 символов): ADMIN_PASSWORD=ваш_пароль python3 server.py")
+HITS, WEEK = {}, 7 * 86400
+CSP = ("default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline' "
+       "https://fonts.googleapis.com; font-src https://fonts.gstatic.com; img-src 'self' data:")
+RULES = ["Уважайте других участников клана.", "Никаких оскорблений и спама в чате.",
+         "Заходите в игру хотя бы раз в неделю.", "Решения лидеров клана не обсуждаются в общем чате.",
+         "Помогайте новичкам — мы все с чего-то начинали."]
+SCHEMA = {"news": {"d": "text", "t": "text", "b": "text"},
+          "members": {"nick": "text", "role": "text", "d": "text", "bio": "text", "mkey": "text"},
+          "apps": {"d": "text", "nick": "text", "contact": "text", "about": "text",
+                   "status": "text default 'new'", "code": "text"},
+          "sessions": {"tok": "text", "ts": "real"},
+          "ach": {"member_id": "integer", "title": "text"},
+          "polls": {"q": "text", "d": "text", "closed": "integer default 0"},
+          "opts": {"poll_id": "integer", "t": "text"},
+          "votes": {"poll_id": "integer", "member_id": "integer", "opt_id": "integer"}}
+
+
+def q(sql, a=()):
+    c = sqlite3.connect(DB)
+    c.row_factory = sqlite3.Row
+    try:
+        rows = [dict(r) for r in c.execute(sql, a).fetchall()]
+        c.commit()
+        return rows
+    finally:
+        c.close()
+
+
+def init():
+    if DB.exists():  # резервная копия при каждом запуске, хранятся последние 7
+        d = BASE / "backups"
+        d.mkdir(exist_ok=True)
+        shutil.copy(DB, d / f"clan-{date.today()}.db")
+        for f in sorted(d.glob("clan-*.db"))[:-7]:
+            f.unlink()
+    for t, cols in SCHEMA.items():  # создаёт таблицы и дописывает недостающие колонки (в т.ч. в старой базе)
+        q(f"create table if not exists {t}(id integer primary key autoincrement)")
+        have = [r["name"] for r in q(f"pragma table_info({t})")]
+        for c, typ in cols.items():
+            if c not in have:
+                q(f"alter table {t} add column {c} {typ}")
+    for r in q("select id from members where mkey is null or mkey=''"):  # ключи участников для старых записей
+        q("update members set mkey=? where id=?", (newkey(), r["id"]))
+    q("create table if not exists kv(k text primary key, v text)")
+    q("insert or ignore into kv values('rules', ?)", (json.dumps(RULES, ensure_ascii=False),))
+    if not q("select 1 from news"):
+        q("insert into news(d,t,b) values(?,?,?)", (str(date.today()), "Сайт клана запущен",
+          "Добро пожаловать! Здесь будут новости, правила и набор в клан."))
+
+
+def newkey():
+    return secrets.token_hex(3).upper()
+
+
+def member_by_key(key, ip):  # проверка ключа участника, с защитой от перебора
+    key = key.strip().upper()[:12]
+    if not key or over("k" + ip, 30, 600):
+        return None
+    row = q("select id,nick from members where mkey=?", (key,))
+    if not row:
+        HITS["k" + ip].append(time.time())
+    return row[0] if row else None
+
+
+def members_json(adm):
+    ach = q("select id,member_id,title from ach order by id")
+    out = []
+    for m in q("select id,nick,role,d,bio,mkey from members order by id"):
+        k = m.pop("mkey")
+        if adm:
+            m["key"] = k
+        m["ach"] = [{"id": a["id"], "title": a["title"]} for a in ach if a["member_id"] == m["id"]]
+        out.append(m)
+    return out
+
+
+def polls_json(key):
+    me = q("select id from members where mkey=?", (key.strip().upper()[:12],)) if key.strip() else []
+    out = []
+    for p in q("select id,q,closed from polls order by id desc"):
+        p["opts"] = q("select o.id,o.t,(select count(*) from votes v where v.opt_id=o.id) n from opts o "
+                      "where o.poll_id=? order by o.id", (p["id"],))
+        v = q("select opt_id from votes where poll_id=? and member_id=?", (p["id"], me[0]["id"])) if me else []
+        p["mine"] = v[0]["opt_id"] if v else None
+        out.append(p)
+    return out
+
+
+def notify(text):
+    def run():
+        try:
+            if DISCORD:
+                urllib.request.urlopen(urllib.request.Request(DISCORD, json.dumps({"content": text}).encode(),
+                    {"Content-Type": "application/json", "User-Agent": "parlament"}), timeout=10)
+            if TG_TOKEN and TG_CHAT:
+                urllib.request.urlopen("https://api.telegram.org/bot%s/sendMessage" % TG_TOKEN,
+                    urllib.parse.urlencode({"chat_id": TG_CHAT, "text": text}).encode(), timeout=10)
+        except Exception as e:
+            print("уведомление не отправлено:", e)
+    threading.Thread(target=run, daemon=True).start()
+
+
+def over(key, n, per):
+    now = time.time()
+    HITS[key] = [t for t in HITS.get(key, []) if now - t < per]
+    return len(HITS[key]) >= n
+
+
+class H(BaseHTTPRequestHandler):
+    def log_message(self, *a):
+        pass
+
+    def out(self, code, obj, ctype="application/json; charset=utf-8", cookie=None):
+        body = obj if isinstance(obj, bytes) else json.dumps(obj, ensure_ascii=False).encode()
+        self.send_response(code)
+        for k, v in (("Content-Type", ctype), ("Content-Length", str(len(body))), ("Cache-Control", "no-store"),
+                     ("X-Content-Type-Options", "nosniff"), ("X-Frame-Options", "DENY"),
+                     ("Content-Security-Policy", CSP)):
+            self.send_header(k, v)
+        if cookie:
+            self.send_header("Set-Cookie", cookie)
+        self.end_headers()
+        self.wfile.write(body)
+
+    def data(self):
+        try:
+            n = int(self.headers.get("Content-Length") or 0)
+            d = json.loads(self.rfile.read(n) or b"{}") if n <= 20000 else {}
+        except ValueError:
+            d = {}
+        return d if isinstance(d, dict) else {}
+
+    def go(self, method):
+        path, _, query = self.path.partition("?")
+        ip = self.client_address[0]
+        if method == "GET" and path in ("/", "/index.html"):
+            return self.out(200, (BASE / "public" / "index.html").read_bytes(), "text/html; charset=utf-8")
+        if not path.startswith("/api/"):
+            return self.out(404, {"error": "not found"})
+        r, d = path[5:], (self.data() if method in ("POST", "PUT") else {})
+        m = re.search(r"sid=([\w-]+)", self.headers.get("Cookie", ""))
+        adm = bool(m and q("select 1 from sessions where tok=? and ts>?", (m.group(1), time.time() - WEEK)))
+        s = lambda k, n: str(d.get(k, "")).strip()[:n]
+
+        if method == "GET" and r == "news":
+            return self.out(200, q("select id,d,t,b from news order by id desc"))
+        if method == "GET" and r == "rules":
+            return self.out(200, json.loads(q("select v from kv where k='rules'")[0]["v"]))
+        if method == "GET" and r == "members":
+            return self.out(200, members_json(adm))
+        if method == "GET" and r == "me":
+            mem = member_by_key(self.headers.get("X-Key", ""), ip)
+            return self.out(200, {"admin": adm, "member": mem["nick"] if mem else None})
+        if method == "GET" and r == "polls":
+            return self.out(200, polls_json(self.headers.get("X-Key", "")))
+        if method == "GET" and r == "status":  # проверка заявки по коду
+            if over("s" + ip, 30, 600):
+                return self.out(429, {"error": "ПОДОЖДИТЕ НЕМНОГО"})
+            HITS["s" + ip].append(time.time())
+            code = urllib.parse.parse_qs(query).get("code", [""])[0].strip().upper()[:12]
+            row = q("select nick,d,status from apps where code=?", (code,)) if code else []
+            if not row:
+                return self.out(404, {"error": "ЗАЯВКА НЕ НАЙДЕНА"})
+            if row[0]["status"] == "accepted":  # принятому показываем ключ участника
+                for mm in q("select nick,mkey from members"):
+                    if mm["nick"].casefold() == row[0]["nick"].casefold():
+                        row[0]["key"] = mm["mkey"]
+            return self.out(200, row[0])
+        if method == "POST" and r == "apply":
+            nick = s("nick", 60)
+            if not nick:
+                return self.out(400, {"error": "ВВЕДИТЕ НИК"})
+            if not s("contact", 200):
+                return self.out(400, {"error": "УКАЖИТЕ КОНТАКТ"})
+            if over("a" + ip, 5, 3600):
+                return self.out(429, {"error": "СЛИШКОМ МНОГО ЗАЯВОК"})
+            if any(r["nick"].casefold() == nick.casefold() for r in q("select nick from apps where status='new'")):
+                return self.out(409, {"error": "ЗАЯВКА С ЭТИМ НИКОМ УЖЕ НА РАССМОТРЕНИИ"})
+            HITS["a" + ip].append(time.time())
+            code = secrets.token_hex(3).upper()
+            q("insert into apps(d,nick,contact,about,status,code) values(?,?,?,?,'new',?)",
+              (str(date.today()), nick, s("contact", 200), s("about", 1000), code))
+            notify(f"Новая заявка в клан: {nick} ({s('contact', 200)})")
+            return self.out(200, {"ok": 1, "code": code})
+        if method == "POST" and r == "vote":
+            mem = member_by_key(self.headers.get("X-Key", ""), ip)
+            if not mem:
+                return self.out(403, {"error": "НУЖЕН КЛЮЧ УЧАСТНИКА"})
+            try:
+                pid, oid = int(d.get("poll")), int(d.get("opt"))
+            except (TypeError, ValueError):
+                return self.out(400, {"error": "ОШИБКА"})
+            pl = q("select closed from polls where id=?", (pid,))
+            if not pl or pl[0]["closed"] or not q("select 1 from opts where id=? and poll_id=?", (oid, pid)):
+                return self.out(400, {"error": "ГОЛОСОВАНИЕ ЗАКРЫТО ИЛИ НЕ НАЙДЕНО"})
+            q("delete from votes where poll_id=? and member_id=?", (pid, mem["id"]))
+            q("insert into votes(poll_id,member_id,opt_id) values(?,?,?)", (pid, mem["id"], oid))
+            return self.out(200, {"ok": 1})
+        if method == "POST" and r == "login":
+            if over("l" + ip, 5, 600):
+                return self.out(429, {"error": "ПОДОЖДИТЕ 10 МИНУТ"})
+            if not hmac.compare_digest(s("password", 200).encode(), PASSWORD.encode()):
+                HITS["l" + ip].append(time.time())
+                return self.out(401, {"error": "НЕВЕРНО"})
+            tok = secrets.token_urlsafe(32)
+            q("delete from sessions where ts<?", (time.time() - WEEK,))
+            q("insert into sessions(tok,ts) values(?,?)", (tok, time.time()))
+            return self.out(200, {"ok": 1}, cookie=f"sid={tok}; HttpOnly; SameSite=Strict; Path=/; Max-Age=604800{SECURE}")
+        if method == "POST" and r == "logout":
+            q("delete from sessions where tok=?", (m.group(1) if m else "",))
+            return self.out(200, {"ok": 1}, cookie="sid=; Max-Age=0; Path=/")
+
+        if not adm:
+            return self.out(403, {"error": "нет доступа"})
+        if method == "GET" and r == "applications":
+            return self.out(200, q("select id,d,nick,contact,about,status,code from apps order by id desc"))
+        if method == "POST" and r == "news" and s("t", 200):
+            q("insert into news(d,t,b) values(?,?,?)", (str(date.today()), s("t", 200), s("b", 5000)))
+            return self.out(200, {"ok": 1})
+        x = re.fullmatch(r"news/(\d+)", r)
+        if method == "PUT" and x and s("t", 200):
+            q("update news set t=?, b=? where id=?", (s("t", 200), s("b", 5000), int(x.group(1))))
+            return self.out(200, {"ok": 1})
+        if method == "POST" and r == "members" and s("nick", 50):
+            q("insert into members(nick,role,d,mkey) values(?,?,?,?)",
+              (s("nick", 50), s("role", 50) or "Участник", str(date.today()), newkey()))
+            return self.out(200, {"ok": 1})
+        if method == "PUT" and r == "rules":
+            rules = [str(v).strip()[:300] for v in d.get("rules", []) if str(v).strip()][:50]
+            q("update kv set v=? where k='rules'", (json.dumps(rules, ensure_ascii=False),))
+            return self.out(200, {"ok": 1})
+        x = re.fullmatch(r"applications/(\d+)/(accept|reject)", r)
+        if method == "POST" and x:  # принять = статус + добавление в состав
+            i, acc = int(x.group(1)), x.group(2) == "accept"
+            row = q("select nick,status from apps where id=?", (i,))
+            if not row:
+                return self.out(404, {"error": "not found"})
+            q("update apps set status=? where id=?", ("accepted" if acc else "rejected", i))
+            if acc and not any(r["nick"].casefold() == row[0]["nick"].casefold() for r in q("select nick from members")):
+                q("insert into members(nick,role,d,mkey) values(?,?,?,?)",
+                  (row[0]["nick"], "Новичок", str(date.today()), newkey()))
+            return self.out(200, {"ok": 1})
+        x = re.fullmatch(r"members/(\d+)", r)
+        if method == "PUT" and x:
+            q("update members set role=?, bio=? where id=?", (s("role", 50) or "Участник", s("bio", 500), int(x.group(1))))
+            return self.out(200, {"ok": 1})
+        x = re.fullmatch(r"members/(\d+)/ach", r)
+        if method == "POST" and x and s("title", 80):
+            q("insert into ach(member_id,title) values(?,?)", (int(x.group(1)), s("title", 80)))
+            return self.out(200, {"ok": 1})
+        if method == "POST" and r == "polls":
+            opts = [str(v).strip()[:100] for v in d.get("options", []) if str(v).strip()][:8]
+            if not s("q", 200) or len(opts) < 2:
+                return self.out(400, {"error": "НУЖЕН ВОПРОС И МИНИМУМ 2 ВАРИАНТА"})
+            pid = q("insert into polls(q,d) values(?,?) returning id", (s("q", 200), str(date.today())))[0]["id"]
+            for o in opts:
+                q("insert into opts(poll_id,t) values(?,?)", (pid, o))
+            return self.out(200, {"ok": 1})
+        x = re.fullmatch(r"polls/(\d+)/toggle", r)
+        if method == "POST" and x:
+            q("update polls set closed=1-coalesce(closed,0) where id=?", (int(x.group(1)),))
+            return self.out(200, {"ok": 1})
+        x = re.fullmatch(r"(news|members|applications|ach|polls)/(\d+)", r)
+        if method == "DELETE" and x:
+            t, i = x.group(1), int(x.group(2))
+            if t == "members":
+                q("delete from ach where member_id=?", (i,))
+                q("delete from votes where member_id=?", (i,))
+            if t == "polls":
+                q("delete from votes where poll_id=?", (i,))
+                q("delete from opts where poll_id=?", (i,))
+            q("delete from %s where id=?" % {"applications": "apps"}.get(t, t), (i,))
+            return self.out(200, {"ok": 1})
+        return self.out(404, {"error": "not found"})
+
+    def do_GET(self): self.go("GET")
+    def do_POST(self): self.go("POST")
+    def do_PUT(self): self.go("PUT")
+    def do_DELETE(self): self.go("DELETE")
+
+
+if __name__ == "__main__":
+    init()
+    print(f"Сайт запущен: http://localhost:{PORT}")
+    ThreadingHTTPServer(("0.0.0.0", PORT), H).serve_forever()
