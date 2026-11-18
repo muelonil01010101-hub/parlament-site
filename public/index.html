@@ -133,7 +133,7 @@ if(d.dx){e.preventDefault();api("DELETE","/api/ach/"+d.dx).then(load);return}
 if(d.pc){api("POST","/api/polls/"+d.pc+"/toggle").then(load);return}
 if(d.dp){if(confirm("Удалить голосование?"))api("DELETE","/api/polls/"+d.dp).then(load);return}
 if(d.en){var n=news.filter(function(x){return x.id==d.en})[0],t=prompt("Заголовок",n.t);if(t===null)return;var b=prompt("Текст",n.b);if(b===null)return;api("PUT","/api/news/"+d.en,{t:t,b:b}).then(load);return}
-if(d.ac||d.rj){api("POST","/api/applications/"+(d.ac||d.rj)+"/"+(d.ac?"accept":"reject")).then(load);return}
+if(d.ac||d.rj){api("POST","/api/applications/"+(d.ac||d.rj)+"/"+(d.ac?"accept":"reject"),{}).then(load,function(e){alert(e.error||"Ошибка")});return}
 var u=d.dn?"news/"+d.dn:d.dm?"members/"+d.dm:d.da?"applications/"+d.da:null;if(u&&confirm("Удалить?"))api("DELETE","/api/"+u).then(function(){return d.da?render():load()})});
 function render(){var p=(location.hash||"#home").slice(1);if(!V[p])p="home";
 document.getElementById("nav").innerHTML=PAGES.map(function(x){return'<a href="#'+x[0]+'"'+(x[0]===p?' class="on"':"")+">"+x[1]+"</a>"}).join("");
