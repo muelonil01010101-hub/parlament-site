@@ -91,7 +91,7 @@ async function handleRequest({request,env}) {
         if(!auth||!env.AUTH_PEPPER||!await verify(password,auth.salt,auth.hash,env.AUTH_PEPPER))mem=null;
       }
       if(!mem)return err("КЛЮЧ ИЛИ ЛОГИН/ПАРОЛЬ НЕВЕРНЫ",401);
-      const tok=rand(32);await run(db,"INSERT INTO member_sessions(tok,member_id,ts) VALUES(?,?,?)",tok,mem.id,Math.floor(Date.now()/1000));
+      const tok=rand(32);await run(db,"INSERT INTO member_sessions(tok,member_id,expires_at) VALUES(?,?,?)",tok,mem.id,Math.floor(Date.now()/1000)+WEEK);
       return json({ok:1,token:tok,member:mem.nick});
     }
     if(request.method==="POST"&&path==="member-logout") {if(memberToken)await run(db,"DELETE FROM member_sessions WHERE tok=?",memberToken);return json({ok:1});}
