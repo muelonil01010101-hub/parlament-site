@@ -13,3 +13,6 @@ INSERT OR IGNORE INTO kv (k,v) VALUES ('rules','["Уважайте других 
 
 INSERT INTO news (d,t,b) SELECT date('now'),'Сайт клана запущен','Добро пожаловать! Здесь будут новости, правила и набор в клан.' WHERE NOT EXISTS (SELECT 1 FROM news);
 CREATE TABLE IF NOT EXISTS rate_limits (k TEXT PRIMARY KEY, n INTEGER NOT NULL, since INTEGER NOT NULL);
+
+CREATE TABLE IF NOT EXISTS member_auth (member_id INTEGER PRIMARY KEY, salt TEXT NOT NULL, hash TEXT NOT NULL, FOREIGN KEY(member_id) REFERENCES members(id));
+CREATE TABLE IF NOT EXISTS member_sessions (tok TEXT PRIMARY KEY, member_id INTEGER NOT NULL, ts INTEGER NOT NULL, FOREIGN KEY(member_id) REFERENCES members(id));
