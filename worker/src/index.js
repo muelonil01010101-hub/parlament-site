@@ -27,10 +27,12 @@ async function notify(env, text) {
   } catch (_) {}
 }
 async function memberByKey(db,key) { return key ? one(db,"SELECT id,nick,role,d,bio,mkey FROM members WHERE mkey=?",key.trim().toUpperCase().slice(0,12)) : null; }
-async function memberBySession(db,tok) { return tok ? one(db,"SELECT m.id,m.nick,m.role,m.d,m.bio,m.mkey FROM member_sessions s JOIN members m ON m.id=s.member_id WHERE s.tok=? AND s.ts>?",tok,Math.floor(Date.now()/1000)-WEEK) : null; }
-async function membersJson(db, isAdmin) {
-  const members=await rows(db,"SELECT id,nick,role,d,bio,mkey FROM members ORDER BY id"), achievements=await rows(db,"SELECT id,member_id,title FROM ach ORDER BY id");
-  return members.map(m=>({id:m.id,nick:m.nick,role:m.role,d:m.d,bio:m.bio,...(isAdmin?{key:m.mkey}:{}),ach:achievements.filter(a=>a.member_id===m.id).map(a=>({id:a.id,title:a.title}))}));
+async function memberBySession(db,tok) {
+  return tok ? one(db,
+    "SELECT m.id,m.nick,m.role,m.d,m.bio,m.mkey FROM member_sessions s JOIN members m ON m.id=s.member_id WHERE s.tok=? AND s.expires_at>?",
+    tok,
+    Math.floor(Date.now()/1000)
+  ) : null;
 }
 async function pollsJson(db,key) {
   const me=await memberByKey(db,key), polls=await rows(db,"SELECT id,q,closed FROM polls ORDER BY id DESC");
