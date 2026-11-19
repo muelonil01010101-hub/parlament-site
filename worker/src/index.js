@@ -26,8 +26,8 @@ async function notify(env, text) {
     if (env.TG_TOKEN && env.TG_CHAT) await fetch(`https://api.telegram.org/bot${env.TG_TOKEN}/sendMessage`,{method:"POST",headers:{"content-type":"application/json"},body:JSON.stringify({chat_id:env.TG_CHAT,text})});
   } catch (_) {}
 }
-async function memberByKey(db,key) { return key ? one(db,"SELECT id,nick FROM members WHERE mkey=?",key.trim().toUpperCase().slice(0,12)) : null; }
-async function memberBySession(db,tok) { return tok ? one(db,"SELECT m.id,m.nick,m.role,m.d,m.bio FROM member_sessions s JOIN members m ON m.id=s.member_id WHERE s.tok=? AND s.ts>?",tok,Math.floor(Date.now()/1000)-WEEK) : null; }
+async function memberByKey(db,key) { return key ? one(db,"SELECT id,nick,role,d,bio,mkey FROM members WHERE mkey=?",key.trim().toUpperCase().slice(0,12)) : null; }
+async function memberBySession(db,tok) { return tok ? one(db,"SELECT m.id,m.nick,m.role,m.d,m.bio,m.mkey FROM member_sessions s JOIN members m ON m.id=s.member_id WHERE s.tok=? AND s.ts>?",tok,Math.floor(Date.now()/1000)-WEEK) : null; }
 async function membersJson(db, isAdmin) {
   const members=await rows(db,"SELECT id,nick,role,d,bio,mkey FROM members ORDER BY id"), achievements=await rows(db,"SELECT id,member_id,title FROM ach ORDER BY id");
   return members.map(m=>({id:m.id,nick:m.nick,role:m.role,d:m.d,bio:m.bio,...(isAdmin?{key:m.mkey}:{}),ach:achievements.filter(a=>a.member_id===m.id).map(a=>({id:a.id,title:a.title}))}));
@@ -39,18 +39,24 @@ async function pollsJson(db,key) {
 }
 function clean(v,n){return String(v??"").trim().slice(0,n)}
 async function limited(db,k,limit,period){const now=Math.floor(Date.now()/1000),r=await one(db,"SELECT n,since FROM rate_limits WHERE k=?",k);if(r&&now-r.since<period&&r.n>=limit)return true;if(!r||now-r.since>=period)await run(db,"INSERT INTO rate_limits(k,n,since) VALUES(?,?,?) ON CONFLICT(k) DO UPDATE SET n=1,since=excluded.since",k,1,now);else await run(db,"UPDATE rate_limits SET n=n+1 WHERE k=?",k);return false}
-export async function onRequest({request,env}) {
+async function handleRequest({request,env}) {
   if(request.method==="OPTIONS") return new Response(null,{status:204,headers});
   const db=env.DB, url=new URL(request.url), path=url.pathname.replace(/^\/api\/?/,"");
   let body={}; if(["POST","PUT"].includes(request.method)){try{body=await request.json();}catch{return err("Некорректные данные");} if(!body||typeof body!=="object"||Array.isArray(body))return err("Некорректные данные");}
   const token=request.headers.get("X-Admin-Token")||"";
   const session=token?await one(db,"SELECT tok FROM sessions WHERE tok=? AND ts>?",token,Math.floor(Date.now()/1000)-WEEK):null;
-  const admin=!!session, key=request.headers.get("X-Key")||"", memberToken=request.headers.get("X-Member-Token")||"", memberSession=await memberBySession(db,memberToken);
+  const admin=!!session, memberToken=request.headers.get("X-Member-Token")||"";
+  const memberSession=await memberBySession(db,memberToken);
+  const key=request.headers.get("X-Key")||memberSession?.mkey||"";
   try {
     if(request.method==="GET"&&path==="news") return json(await rows(db,"SELECT id,d,t,b FROM news ORDER BY id DESC"));
     if(request.method==="GET"&&path==="rules"){const r=await one(db,"SELECT v FROM kv WHERE k='rules'");return json(r?JSON.parse(r.v):[]);}
     if(request.method==="GET"&&path==="members") return json(await membersJson(db,admin));
-    if(request.method==="GET"&&path==="me"){const m=memberSession||await memberByKey(db,key);return json({admin,member:m?.nick||null,profile:m?{id:m.id,nick:m.nick,role:m.role,d:m.d,bio:m.bio,hasPassword:!!(await one(db,"SELECT member_id FROM member_auth WHERE member_id=?",m.id))}:null});}
+    if(request.method==="GET"&&path==="me"){
+      const m=memberSession||await memberByKey(db,key);
+      const hasPassword=!!(m&&await one(db,"SELECT member_id FROM member_auth WHERE member_id=?",m.id));
+      return json({admin,member:m?.nick||null,profile:m?{id:m.id,nick:m.nick,role:m.role,d:m.d,bio:m.bio,hasPassword}:null});
+    }
     if(request.method==="GET"&&path==="polls") return json(await pollsJson(db,key));
     if(request.method==="GET"&&path==="status") {
       const ip=request.headers.get("CF-Connecting-IP")||"unknown";if(await limited(db,"status:"+ip,30,600))return err("ПОДОЖДИТЕ НЕМНОГО",429);const code=clean(url.searchParams.get("code"),12).toUpperCase(); if(!code)return err("ЗАЯВКА НЕ НАЙДЕНА",404);
@@ -72,54 +78,44 @@ export async function onRequest({request,env}) {
       await run(db,"DELETE FROM login_attempts WHERE ip=?",ip);const tok=rand(32);await run(db,"INSERT INTO sessions(tok,ts) VALUES(?,?)",tok,now);return json({ok:1,token:tok});
     }
     if(request.method==="POST"&&path==="logout") {if(token)await run(db,"DELETE FROM sessions WHERE tok=?",token);return json({ok:1});}
-    if(request.method==="POST"&&path==="change-password") {
-      if(request.method==="POST"&&path==="member-login") {
-      const ip=request.headers.get("CF-Connecting-IP")||"unknown";if(await limited(db,"member-login:"+ip,10,600))return err("СЛИШКОМ МНОГО ПОПЫТОК. ПОДОЖДИТЕ 10 МИНУТ",429);
+    if(request.method==="POST"&&path==="member-login") {
+      const ip=request.headers.get("CF-Connecting-IP")||"unknown";
+      if(await limited(db,"member-login:"+ip,10,600))return err("СЛИШКОМ МНОГО ПОПЫТОК. ПОДОЖДИТЕ 10 МИНУТ",429);
       const suppliedKey=clean(body.key,20).toUpperCase(), nick=clean(body.nick,60), password=clean(body.password,200);
       let mem=suppliedKey?await memberByKey(db,suppliedKey):null;
-      if(!mem&&nick&&password){mem=await one(db,"SELECT id,nick FROM members WHERE lower(nick)=lower(?)",nick);const auth=mem&&await one(db,"SELECT salt,hash FROM member_auth WHERE member_id=?",mem.id);if(!auth||!env.AUTH_PEPPER||!await verify(password,auth.salt,auth.hash,env.AUTH_PEPPER))mem=null;}
+      if(!mem&&nick&&password){
+        mem=await one(db,"SELECT id,nick,role,d,bio,mkey FROM members WHERE lower(nick)=lower(?)",nick);
+        const auth=mem&&await one(db,"SELECT salt,hash FROM member_auth WHERE member_id=?",mem.id);
+        if(!auth||!env.AUTH_PEPPER||!await verify(password,auth.salt,auth.hash,env.AUTH_PEPPER))mem=null;
+      }
       if(!mem)return err("КЛЮЧ ИЛИ ЛОГИН/ПАРОЛЬ НЕВЕРНЫ",401);
-      const tok=rand(32);await run(db,"INSERT INTO member_sessions(tok,member_id,ts) VALUES(?,?,?)",tok,mem.id,Math.floor(Date.now()/1000));return json({ok:1,token:tok,member:mem.nick});
+      const tok=rand(32);await run(db,"INSERT INTO member_sessions(tok,member_id,ts) VALUES(?,?,?)",tok,mem.id,Math.floor(Date.now()/1000));
+      return json({ok:1,token:tok,member:mem.nick});
     }
-    if(request.method==="POST"&&path==="member-logout"){if(memberToken)await run(db,"DELETE FROM member_sessions WHERE tok=?",memberToken);return json({ok:1});}
-    if(request.method==="GET"&&path==="profile"){if(!memberSession)return err("ВОЙДИТЕ В АККАУНТ УЧАСТНИКА",401);const auth=await one(db,"SELECT member_id FROM member_auth WHERE member_id=?",memberSession.id);return json({...memberSession,hasPassword:!!auth});}
-    if(request.method==="PUT"&&path==="profile"){
+    if(request.method==="POST"&&path==="member-logout") {if(memberToken)await run(db,"DELETE FROM member_sessions WHERE tok=?",memberToken);return json({ok:1});}
+    if(request.method==="GET"&&path==="profile") {
+      if(!memberSession)return err("ВОЙДИТЕ В АККАУНТ УЧАСТНИКА",401);
+      const auth=await one(db,"SELECT member_id FROM member_auth WHERE member_id=?",memberSession.id);
+      return json({...memberSession,hasPassword:!!auth});
+    }
+    if(request.method==="PUT"&&path==="profile") {
       if(!memberSession)return err("ВОЙДИТЕ В АККАУНТ УЧАСТНИКА",401);
       const bio=clean(body.bio,500);await run(db,"UPDATE members SET bio=? WHERE id=?",bio,memberSession.id);return json({ok:1});
     }
-    if(request.method==="POST"&&path==="member-password"){
+    if(request.method==="POST"&&path==="member-password") {
       if(!memberSession)return err("ВОЙДИТЕ В АККАУНТ УЧАСТНИКА",401);
       if(!env.AUTH_PEPPER)return err("СЕРВЕР НЕ НАСТРОЕН",500);
       const next=clean(body.password,200), current=clean(body.current,200), existing=await one(db,"SELECT salt,hash FROM member_auth WHERE member_id=?",memberSession.id);
       if(next.length<8)return err("ПАРОЛЬ ДОЛЖЕН БЫТЬ НЕ МЕНЬШЕ 8 СИМВОЛОВ");
       if(existing&&!await verify(current,existing.salt,existing.hash,env.AUTH_PEPPER))return err("ТЕКУЩИЙ ПАРОЛЬ НЕВЕРНЫЙ",401);
-      const h=await hashPassword(next,undefined,env.AUTH_PEPPER);await run(db,"INSERT INTO member_auth(member_id,salt,hash) VALUES(?,?,?) ON CONFLICT(member_id) DO UPDATE SET salt=excluded.salt,hash=excluded.hash",memberSession.id,h.salt,h.hash);return json({ok:1});
+      const h=await hashPassword(next,undefined,env.AUTH_PEPPER);
+      await run(db,"INSERT INTO member_auth(member_id,salt,hash) VALUES(?,?,?) ON CONFLICT(member_id) DO UPDATE SET salt=excluded.salt,hash=excluded.hash",memberSession.id,h.salt,h.hash);
+      return json({ok:1});
     }
-    if(!admin)return err("НЕТ ДОСТУПА",403);const current=clean(body.current,200), next=clean(body.password,200);if(next.length<8)return err("НОВЫЙ ПАРОЛЬ: МИНИМУМ 8 СИМВОЛОВ");
+    if(request.method==="POST"&&path==="change-password") {
+      if(!admin)return err("НЕТ ДОСТУПА",403);const current=clean(body.current,200), next=clean(body.password,200);if(next.length<8)return err("НОВЫЙ ПАРОЛЬ: МИНИМУМ 8 СИМВОЛОВ");
       const auth=await one(db,"SELECT salt,hash FROM admin_auth WHERE id=1");if(!auth||!await verify(current,auth.salt,auth.hash,env.AUTH_PEPPER))return err("ТЕКУЩИЙ ПАРОЛЬ НЕВЕРНЫЙ",401);
       const h=await hashPassword(next,undefined,env.AUTH_PEPPER);await run(db,"UPDATE admin_auth SET salt=?,hash=? WHERE id=1",h.salt,h.hash);await run(db,"DELETE FROM sessions");const tok=rand(32);await run(db,"INSERT INTO sessions(tok,ts) VALUES(?,?)",tok,Math.floor(Date.now()/1000));return json({ok:1,token:tok});
-    }
-    if(request.method==="POST"&&path==="member-login") {
-      const ip=request.headers.get("CF-Connecting-IP")||"unknown";if(await limited(db,"member-login:"+ip,10,600))return err("СЛИШКОМ МНОГО ПОПЫТОК. ПОДОЖДИТЕ 10 МИНУТ",429);
-      const suppliedKey=clean(body.key,20).toUpperCase(), nick=clean(body.nick,60), password=clean(body.password,200);
-      let mem=suppliedKey?await memberByKey(db,suppliedKey):null;
-      if(!mem&&nick&&password){mem=await one(db,"SELECT id,nick FROM members WHERE lower(nick)=lower(?)",nick);const auth=mem&&await one(db,"SELECT salt,hash FROM member_auth WHERE member_id=?",mem.id);if(!auth||!env.AUTH_PEPPER||!await verify(password,auth.salt,auth.hash,env.AUTH_PEPPER))mem=null;}
-      if(!mem)return err("КЛЮЧ ИЛИ ЛОГИН/ПАРОЛЬ НЕВЕРНЫ",401);
-      const tok=rand(32);await run(db,"INSERT INTO member_sessions(tok,member_id,ts) VALUES(?,?,?)",tok,mem.id,Math.floor(Date.now()/1000));return json({ok:1,token:tok,member:mem.nick});
-    }
-    if(request.method==="POST"&&path==="member-logout"){if(memberToken)await run(db,"DELETE FROM member_sessions WHERE tok=?",memberToken);return json({ok:1});}
-    if(request.method==="GET"&&path==="profile"){if(!memberSession)return err("ВОЙДИТЕ В АККАУНТ УЧАСТНИКА",401);const auth=await one(db,"SELECT member_id FROM member_auth WHERE member_id=?",memberSession.id);return json({...memberSession,hasPassword:!!auth});}
-    if(request.method==="PUT"&&path==="profile"){
-      if(!memberSession)return err("ВОЙДИТЕ В АККАУНТ УЧАСТНИКА",401);
-      const bio=clean(body.bio,500);await run(db,"UPDATE members SET bio=? WHERE id=?",bio,memberSession.id);return json({ok:1});
-    }
-    if(request.method==="POST"&&path==="member-password"){
-      if(!memberSession)return err("ВОЙДИТЕ В АККАУНТ УЧАСТНИКА",401);
-      if(!env.AUTH_PEPPER)return err("СЕРВЕР НЕ НАСТРОЕН",500);
-      const next=clean(body.password,200), current=clean(body.current,200), existing=await one(db,"SELECT salt,hash FROM member_auth WHERE member_id=?",memberSession.id);
-      if(next.length<8)return err("ПАРОЛЬ ДОЛЖЕН БЫТЬ НЕ МЕНЬШЕ 8 СИМВОЛОВ");
-      if(existing&&!await verify(current,existing.salt,existing.hash,env.AUTH_PEPPER))return err("ТЕКУЩИЙ ПАРОЛЬ НЕВЕРНЫЙ",401);
-      const h=await hashPassword(next,undefined,env.AUTH_PEPPER);await run(db,"INSERT INTO member_auth(member_id,salt,hash) VALUES(?,?,?) ON CONFLICT(member_id) DO UPDATE SET salt=excluded.salt,hash=excluded.hash",memberSession.id,h.salt,h.hash);return json({ok:1});
     }
     if(!admin)return err("НЕТ ДОСТУПА",403);
     if(request.method==="GET"&&path==="applications")return json(await rows(db,"SELECT id,d,nick,contact,about,status,code FROM apps ORDER BY id DESC"));
@@ -138,5 +134,10 @@ export async function onRequest({request,env}) {
   } catch(e) { console.error(e); return err("Внутренняя ошибка сервера",500); }
 }
 
+
+export async function onRequest(ctx) {
+  try { return await handleRequest(ctx); }
+  catch (e) { console.error(e); return json({error:"Внутренняя ошибка сервера"},500); }
+}
 
 export default { fetch(request, env) { return onRequest({request, env}); } };
